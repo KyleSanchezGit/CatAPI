@@ -74,11 +74,19 @@ def get_cat_url(tag: str) -> Optional[str]:
         )
         resp.raise_for_status()
         data = resp.json()
-        return f"{API_BASE_URL}{data['url']}"
+        raw = data.get("url", "")
+
+        # **Fix:** only prefix if it's a relative path**
+        if raw.startswith("http"):
+            return raw
+        else:
+            return f"{API_BASE_URL}{raw}"
+
     except Exception as e:
         logging.warning(f"get_cat_url failed: {e}")
         st.error("Failed to get cat image. Try again later.")
         return None
+
 
 
 
