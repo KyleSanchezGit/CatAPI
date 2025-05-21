@@ -1,178 +1,161 @@
 import streamlit as st
 import requests
-from typing import List, Optional, Dict
 import time
-from datetime import datetime
-import json
 import hashlib
+import logging
+from datetime import datetime
+from typing import List, Optional
+import validators
+from typing import Dict, Any
 
-# Constants
+
+# ─── CONFIG ─────────────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="🐱 Enhanced Cat Image Generator",
+    page_icon="😺",
+    layout="wide",
+)
+
 API_BASE_URL = "https://cataas.com"
 RATE_LIMIT_SECONDS = 2
 MAX_RETRIES = 3
 DEFAULT_IMAGE_SIZE = (400, 400)
 
-# Initialize session state for rate limiting and favorites
-if 'last_api_call' not in st.session_state:
-    st.session_state.last_api_call = 0
-if 'favorites' not in st.session_state:
-    st.session_state.favorites = {}
-if 'api_call_count' not in st.session_state:
-    st.session_state.api_call_count = 0
-
+# ─── SESSION-STATE SETUP ────────────────────────────────────────────────────────
+if 'last_api_call'   not in st.session_state: st.session_state.last_api_call = 0
+if 'favorites'       not in st.session_state: st.session_state.favorites   = {}
+if 'api_call_count'  not in st.session_state: st.session_state.api_call_count = 0
 
 def rate_limit_check() -> bool:
-    """Check if we should rate limit the API calls."""
-    current_time = time.time()
-    if current_time - st.session_state.last_api_call < RATE_LIMIT_SECONDS:
+    now = time.time()
+    if now - st.session_state.last_api_call < RATE_LIMIT_SECONDS:
         return False
-    st.session_state.last_api_call = current_time
+    st.session_state.last_api_call = now
+    st.session_state.api_call_count += 1
     return True
 
-
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_data(ttl=3600)
 def fetch_tags() -> List[str]:
-    """Fetch available cat tags from the API with retry logic."""
     if not rate_limit_check():
-        st.warning("Please wait a moment before requesting more data.")
         return []
-
     for attempt in range(MAX_RETRIES):
         try:
-            with st.spinner("Fetching available tags..."):
-                response = requests.get(
-                    f"{API_BASE_URL}/api/tags",
-                    timeout=5,
-                    headers={"User-Agent": "Streamlit-Cat-App"}
-                )
-                response.raise_for_status()
-                data = response.json()
-                if not isinstance(data, list):
-                    raise ValueError("Expected a list of tags from API")
-                return sorted(data)  # Sort tags alphabetically
-        except requests.RequestException as e:
-            logging.warning(f"Request attempt {attempt + 1} failed: {str(e)}")
-            if attempt == MAX_RETRIES - 1:
-                st.error(f"Error fetching tags: {str(e)}")
-                return []
-        except ValueError as e:
-            logging.error(f"Invalid data received from API: {str(e)}")
-            st.error("Error processing API response")
-            return []
-        time.sleep(min(2 ** attempt, 8))  # Exponential backoff with max delay
+            resp = requests.get(f"{API_BASE_URL}/api/tags", timeout=5)
+            resp.raise_for_status()
+            tags = resp.json()
+            if not isinstance(tags, list):
+                raise ValueError("Malformed tags list")
+            return sorted(tags)
+        except Exception as e:
+            logging.warning(f"fetch_tags attempt {attempt+1} failed: {e}")
+            time.sleep(2 ** attempt)
+    st.error("Could not load cat tags. Try again later.")
+    return []
+
+def validate_url(url: str) -> bool:
+    return bool(validators.url(url) and url.startswith(API_BASE_URL))
 
 
-def get_cat_image(tag: str, size: tuple = DEFAULT_IMAGE_SIZE) -> Optional[str]:
-    """Fetch cat image URL with size parameters and validation."""
+def get_cat_url(tag: str, size: tuple) -> Optional[str]:
     if not rate_limit_check():
-        st.warning("Please wait a moment before requesting more images.")
+        st.warning("Rate limit: slow down a bit 😉")
         return None
 
-    # Sanitize tag input
-    tag = tag.strip().lower()
-    if not tag.isalnum() and not all(c in '-_' for c in tag if not c.isalnum()):
-        st.error("Invalid tag format")
+    #Error Handling
+    w, h = size
+    if not (100 <= w <= 800 and 100 <= h <= 800):
+        st.error("Invalid image dimensions")
         return None
 
-    try:
-        # Add size parameters to URL
-        width, height = size
-        url = f"{API_BASE_URL}/cat/{tag}?width={width}&height={height}"
+    #Retries
+    for attempt in range(MAX_RETRIES):
+        try:
+            endpoint = "/cat" + (f"/{tag}" if tag else "")
+            url = f"{API_BASE_URL}{endpoint}?width={w}&height={h}"
+            # Verify URL exists
+            resp = requests.head(url, timeout=5)
+            resp.raise_for_status()
+            return url
+        except Exception as e:
+            logging.warning(f"get_cat_url attempt {attempt + 1} failed: {e}")
+            time.sleep(2 ** attempt)
 
-        # Verify image URL is accessible
-        response = requests.head(url, timeout=5)
-        response.raise_for_status()
-        return url
-    except Exception as e:
-        st.error(f"Error getting cat image: {str(e)}")
-        return None
-
-
-def save_to_favorites(image_url: str, tag: str):
-    """Save image to favorites with timestamp."""
-    image_hash = hashlib.md5(image_url.encode()).hexdigest()
-    st.session_state.favorites[image_hash] = {
-        'url': image_url,
-        'tag': tag,
-        'timestamp': datetime.now().isoformat(),
-    }
-    st.success("Added to favorites!")
+    st.error("Failed to get cat image. Try again later.")
+    return None
 
 
-def display_favorites():
-    """Display all favorite images."""
-    if not st.session_state.favorites:
-        st.info("No favorites saved yet!")
+def save_favorite(url: str, tag: str):
+    if not validate_url(url):
+        st.error("Invalid URL")
         return
 
-    st.subheader("Your Favorite Cats")
-    cols = st.columns(3)
-    for idx, (_, favorite) in enumerate(st.session_state.favorites.items()):
-        with cols[idx % 3]:
-            st.image(favorite['url'], caption=f"Tag: {favorite['tag']}")
-            if st.button(f"Remove {favorite['tag']}", key=f"remove_{idx}"):
-                st.session_state.favorites.pop(favorite['url'], None)
-                st.rerun()
+    # Limit total favorites
+    if len(st.session_state.favorites) >= 50:
+        st.warning("Maximum favorites limit reached. Remove some old favorites first.")
+        return
 
+    key = hashlib.sha256(url.encode()).hexdigest()
+    st.session_state.favorites[key] = {
+        "url": url,
+        "tag": tag,
+        "added": datetime.now().isoformat(),
+    }
+    st.success("❤️ Added to favorites!")
+
+
+def show_favorites():
+    favs = st.session_state.favorites
+    if not favs:
+        st.info("No favorites yet!")
+        return
+    st.subheader("Your Favorites")
+    cols = st.columns(3)
+    for i,(k,v) in enumerate(favs.items()):
+        with cols[i % 3]:
+            st.image(v["url"], caption=v["tag"])
+            if st.button("Remove", key=f"rm_{k}"):
+                st.session_state.favorites.pop(k)
+                st.experimental_rerun()
 
 def main():
     st.title("🐱 Enhanced Cat Image Generator")
-    st.write("Generate and collect your favorite cat images!")
+    st.write("Generate and save your favorite cat pics from cataas.com!")
 
-    # Settings sidebar
+    # ── Sidebar UI ────────────────────────────────────────────────────────────────
     with st.sidebar:
-        st.subheader("Settings")
-        image_width = st.slider("Image Width", 100, 800, DEFAULT_IMAGE_SIZE[0], 50)
-        image_height = st.slider("Image Height", 100, 800, DEFAULT_IMAGE_SIZE[1], 50)
-        show_favorites = st.checkbox("Show Favorites")
+        st.header("Settings")
+        w = st.slider("Width",  100, 800, DEFAULT_IMAGE_SIZE[0], 50)
+        h = st.slider("Height", 100, 800, DEFAULT_IMAGE_SIZE[1], 50)
+        show_fav = st.checkbox("Show Favorites")
+        st.markdown("---")
+        st.header("API Usage")
+        st.write(f"Calls today: {st.session_state.api_call_count}")
 
-    # Main content
+    # ── Fetch tags & build controls ──────────────────────────────────────────────
     tags = fetch_tags()
-
+    choice = None
     if tags:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            choice = st.selectbox("Select a cat breed/tag:", tags)
-        with col2:
-            if st.button("Generate New Cat", type="primary"):
-                st.session_state.current_image = None  # Force new image
+        c1,c2 = st.columns([3,1])
+        with c1:
+            choice = st.selectbox("Pick a tag (or leave blank):", [""] + tags)
+        with c2:
+            if st.button("🎲 Generate"):
+                # trigger a rerun
+                st.session_state.get("gen", 0)
+                st.session_state["gen"] = st.session_state["gen"] + 1
 
-        if choice:
-            with st.spinner("Loading cat image..."):
-                image_url = get_cat_image(choice, (image_width, image_height))
-                if image_url:
-                    st.image(image_url, caption=f"A {choice} cat", use_column_width=True)
+    # ── Show image & favorite button ─────────────────────────────────────────────
+    if st.session_state.get("gen", 0) > 0:
+        url = get_cat_url(choice, (w,h))
+        if url:
+            st.image(url, caption=f"{choice or 'Random'} cat", use_column_width=False)
+            if st.button("❤️ Favorite this"):
+                save_favorite(url, choice)
 
-                    # Favorite button
-                    if st.button("❤️ Add to Favorites"):
-                        save_to_favorites(image_url, choice)
-    else:
-        st.warning("No tags available. Please try again later.")
-
-    # Display favorites if enabled
-    if show_favorites:
+    # ── Favorites section ─────────────────────────────────────────────────────────
+    if show_fav:
         st.markdown("---")
-        display_favorites()
-
-    # Display API usage statistics
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("API Usage Stats")
-        st.write(f"API calls today: {st.session_state.api_call_count}")
-
+        show_favorites()
 
 if __name__ == "__main__":
     main()
-
-st.title("Streamlit Cat API")
-st.write(
-    "A simple Streamlit app that uses the Cat API to generate random cats and display them in the app."
-)
-
-pages = [
-    st.Page("Gallery", "pages/gallery.py"),
-    st.Page("Favorites", "pages/favorites.py"),
-    st.Page("Settings", "pages/settings.py"),
-]
-current_page = st.navigation(pages)
-current_page.run()
