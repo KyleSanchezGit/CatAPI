@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit.navigation import st as navigation
+
 
 
 st.title("Streamlit Cat API")
