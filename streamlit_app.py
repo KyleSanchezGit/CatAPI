@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import List, Optional
 import validators
 from typing import Dict, Any
+from PIL import Image
+from io    import BytesIO
 
 
 # ─── CONFIG ─────────────────────────────────────────────────────────────────────
@@ -142,9 +144,16 @@ def main():
     if st.session_state.gen > 0:
         url = get_cat_url(choice)
         if url:
-            st.image(url, caption=f"{choice or 'Random'} cat", use_container_width=True)
-            st.write(f"Generated {st.session_state.gen} times today")
-            
+            try:
+                resp = requests.get(url, timeout=5)
+                resp.raise_for_status()
+                img = Image.open(BytesIO(resp.content))
+                st.image(img,
+                         caption=f"{choice or 'Random'} cat",
+                         use_container_width=True)
+            except Exception as e:
+                st.error("Failed to download/display image")
+
             if st.button("❤️ Favorite this"):
                 save_favorite(url, choice)
 
