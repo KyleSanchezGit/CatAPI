@@ -57,32 +57,28 @@ def validate_url(url: str) -> bool:
     return bool(validators.url(url) and url.startswith(API_BASE_URL))
 
 
-def get_cat_url(tag: str, size: tuple) -> Optional[str]:
+def get_cat_url(tag: str) -> Optional[str]:
+    """Fetch a random cat (optionally by tag) via the JSON API."""
     if not rate_limit_check():
         st.warning("Rate limit: slow down a bit 😉")
         return None
 
-    #Error Handling
-    w, h = size
-    if not (100 <= w <= 800 and 100 <= h <= 800):
-        st.error("Invalid image dimensions")
+    endpoint = "/cat" + (f"/{tag}" if tag else "")
+    try:
+        resp = requests.get(
+            f"{API_BASE_URL}{endpoint}?json=true",
+            timeout=5,
+            headers={"User-Agent": "Streamlit-Cat-App"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # build the full image URL
+        return f"{API_BASE_URL}{data['url']}"
+    except Exception as e:
+        logging.warning(f"get_cat_url failed: {e}")
+        st.error("Failed to get cat image. Try again later.")
         return None
 
-    #Retries
-    for attempt in range(MAX_RETRIES):
-        try:
-            endpoint = "/cat" + (f"/{tag}" if tag else "")
-            url = f"{API_BASE_URL}{endpoint}?width={w}&height={h}"
-            # Verify URL exists
-            resp = requests.head(url, timeout=5)
-            resp.raise_for_status()
-            return url
-        except Exception as e:
-            logging.warning(f"get_cat_url attempt {attempt + 1} failed: {e}")
-            time.sleep(2 ** attempt)
-
-    st.error("Failed to get cat image. Try again later.")
-    return None
 
 
 def save_favorite(url: str, tag: str):
@@ -145,7 +141,7 @@ def main():
 
     # ── Show image & favorite button ─────────────────────────────────────────────
     if st.session_state.gen > 0:
-        url = get_cat_url(choice, (w,h))
+        url = get_cat_url(choice)
         if url:
             st.image(url, caption=f"{choice or 'Random'} cat", use_column_width=False)
             if st.button("❤️ Favorite this"):
