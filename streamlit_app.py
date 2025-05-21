@@ -11,7 +11,7 @@ from typing import Dict, Any
 
 # ─── CONFIG ─────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="🐱 Enhanced Cat Image Generator",
+    page_title="🐱 Cat Image Generator",
     page_icon="😺",
     layout="wide",
 )
