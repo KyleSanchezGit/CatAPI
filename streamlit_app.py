@@ -119,12 +119,12 @@ def main():
     st.title("🐱 Enhanced Cat Image Generator")
     st.write("Generate and collect your favorite cat images!")
 
-    '''''# Settings sidebar
+    # Settings sidebar
     with st.sidebar:
         st.subheader("Settings")
         image_width = st.slider("Image Width", 100, 800, DEFAULT_IMAGE_SIZE[0], 50)
         image_height = st.slider("Image Height", 100, 800, DEFAULT_IMAGE_SIZE[1], 50)
-        show_favorites = st.checkbox("Show Favorites") '''
+        show_favorites = st.checkbox("Show Favorites")
 
     # Main content
     tags = fetch_tags()
