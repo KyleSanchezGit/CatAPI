@@ -96,7 +96,7 @@ def save_favorite(url: str, tag: str):
         return
 
     # Limit total favorites
-    if len(st.session_state.favorites) >= 50:
+    if len(st.session_state.favorites) >= 25:
         st.warning("Maximum favorites limit reached. Remove some old favorites first.")
         return
 
