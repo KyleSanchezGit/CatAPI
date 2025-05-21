@@ -25,6 +25,7 @@ DEFAULT_IMAGE_SIZE = (400, 400)
 if 'last_api_call'   not in st.session_state: st.session_state.last_api_call = 0
 if 'favorites'       not in st.session_state: st.session_state.favorites   = {}
 if 'api_call_count'  not in st.session_state: st.session_state.api_call_count = 0
+if 'gen'             not in st.session_state: st.session_state.gen = 0
 
 def rate_limit_check() -> bool:
     now = time.time()
@@ -118,7 +119,7 @@ def show_favorites():
                 st.experimental_rerun()
 
 def main():
-    st.title("🐱 Enhanced Cat Image Generator")
+    st.title("🐱 Cat Image Generator")
     st.write("Generate and save your favorite cat pics from cataas.com!")
 
     # ── Sidebar UI ────────────────────────────────────────────────────────────────
@@ -140,12 +141,10 @@ def main():
             choice = st.selectbox("Pick a tag (or leave blank):", [""] + tags)
         with c2:
             if st.button("🎲 Generate"):
-                # trigger a rerun
-                st.session_state.get("gen", 0)
-                st.session_state["gen"] = st.session_state["gen"] + 1
+                st.session_state.gen += 1
 
     # ── Show image & favorite button ─────────────────────────────────────────────
-    if st.session_state.get("gen", 0) > 0:
+    if st.session_state.gen > 0:
         url = get_cat_url(choice, (w,h))
         if url:
             st.image(url, caption=f"{choice or 'Random'} cat", use_column_width=False)
