@@ -72,7 +72,6 @@ def get_cat_url(tag: str) -> Optional[str]:
         )
         resp.raise_for_status()
         data = resp.json()
-        # build the full image URL
         return f"{API_BASE_URL}{data['url']}"
     except Exception as e:
         logging.warning(f"get_cat_url failed: {e}")
@@ -143,7 +142,9 @@ def main():
     if st.session_state.gen > 0:
         url = get_cat_url(choice)
         if url:
-            st.image(url, caption=f"{choice or 'Random'} cat", use_column_width=False)
+            st.image(url, caption=f"{choice or 'Random'} cat", use_container_width=True)
+            st.write(f"Generated {st.session_state.gen} times today")
+            
             if st.button("❤️ Favorite this"):
                 save_favorite(url, choice)
 
