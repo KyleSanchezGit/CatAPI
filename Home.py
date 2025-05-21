@@ -114,14 +114,24 @@ def show_favorites():
     if not favs:
         st.info("No favorites yet!")
         return
+
     st.subheader("Your Favorites")
     cols = st.columns(3)
-    for i,(k,v) in enumerate(favs.items()):
+    for i, (k, fav) in enumerate(favs.items()):
         with cols[i % 3]:
-            st.image(v["url"], caption=v["tag"])
+            # download the image bytes and render via PIL
+            try:
+                resp = requests.get(fav["url"], timeout=5)
+                resp.raise_for_status()
+                img = Image.open(BytesIO(resp.content))
+                st.image(img, caption=fav["tag"], use_container_width=True)
+            except Exception:
+                st.error("Failed to load favorite image")
+
             if st.button("Remove", key=f"rm_{k}"):
                 st.session_state.favorites.pop(k)
                 st.experimental_rerun()
+
 
 def main():
     st.title("🐱 Cat Image Generator")
