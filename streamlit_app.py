@@ -1,6 +1,16 @@
 import streamlit as st
+from streamlit.navigation import st as navigation
 
-st.title("🎈 My new app")
+
+st.title("Streamlit Cat API")
 st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
+    "A simple Streamlit app that uses the Cat API to generate random cats and display them in the app."
 )
+
+pages = [
+    st.Page("Gallery", "pages/gallery.py"),
+    st.Page("Favorites", "pages/favorites.py"),
+    st.Page("Settings", "pages/settings.py"),
+]
+current_page = st.navigation(pages)
+current_page.run()
